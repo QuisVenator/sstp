@@ -26,15 +26,28 @@ def send_file_via_serial(address, filename, serial_port, baudrate):
         ser.close()
         sys.exit(1)
 
+    current_byte = data[0]
+    repeat_count = 1
+
     with tqdm(total=len(data), unit='B', unit_scale=True, unit_divisor=1024) as pbar:
-        for byte in data:
-            byte_hex = binascii.hexlify(bytes([byte])).decode('utf-8')
-            command = f"mw {hex(address)} 0x{byte_hex} 1\r\n"
-            ser.write(command.encode('utf-8'))
-            ser.flush()
-            time.sleep(0.001)
-            address += 1
+        for byte in data[1:]:
+            if byte == current_byte:
+                repeat_count += 1
+            else:
+                write_command = f"mw.b {hex(address)} 0x{binascii.hexlify(bytes([current_byte])).decode('utf-8')} {repeat_count}\r\n"
+                ser.write(write_command.encode('utf-8'))
+                ser.flush()
+                time.sleep(0.001)  # 1ms sleep
+                address += repeat_count
+                repeat_count = 1
+                current_byte = byte
+
             pbar.update(1)
+
+        # Send the last group of repeated bytes
+        write_command = f"mw.b {hex(address)} 0x{binascii.hexlify(bytes([current_byte])).decode('utf-8')} {repeat_count}\r\n"
+        ser.write(write_command.encode('utf-8'))
+        ser.flush()
 
     ser.close()
 
